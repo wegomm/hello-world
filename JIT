@@ -6,3 +6,50 @@ JIT compilation does require processor time and memory usage. When the JVM first
 In practice, methods are not compiled the first time they are called. For each method, the JVM maintains a call count, which is incremented every time the method is called. The JVM interprets a method until its call count exceeds a JIT compilation threshold. Therefore, often-used methods are compiled soon after the JVM has started, and less-used methods are compiled much later, or not at all. The JIT compilation threshold helps the JVM start quickly and still have improved performance. The threshold has been carefully selected to obtain an optimal balance between startup times and long term performance.
 After a method is compiled, its call count is reset to zero and subsequent calls to the method continue to increment its count. When the call count of a method reaches a JIT recompilation threshold, the JIT compiler compiles it a second time, applying a larger selection of optimizations than on the previous compilation. This process is repeated until the maximum optimization level is reached. The busiest methods of a Java program are always optimized most aggressively, maximizing the performance benefits of using the JIT compiler. The JIT compiler can also measure operational data at run time, and use that data to improve the quality of further recompilations.
 The JIT compiler can be disabled, in which case the entire Java program will be interpreted. Disabling the JIT compiler is not recommended except to diagnose or work around JIT compilation problems.
+
+
+
+SELECT DISTINCT CHILD_MDL_NAME FROM (
+SELECT PARENT_MDL_NAME,CHILD_MDL_NAME,CONNECT_BY_ROOT PARENT_MDL_NAME AS BAL_MDL_NAME
+FROM (
+SELECT /* + PARALLEL 16 */DISTINCT S.MDL_NAME AS PARENT_MDL_NAME,S.MDL_TYPE,REGEXP_REPLACE(C.ENTITY_INPUT,'''(.*)'',''(.*)'',''(.*)''','\1') AS CHILD_MDL_NAME  --D.BAL_ACCT,C.ENTITY_INPUT,
+FROM MDL_SETUP@RUBY_PROD S,MDL_ENTITY_RELN@RUBY_PROD C,MDL_ASGN_DETL@RUBY_PROD D
+WHERE S.STATUS = 'A'
+AND S.START_DATE = '30-APR-17'
+AND S.DATASET_ID = 2
+AND S.MDL_SETUP_ID = C.MDL_SETUP_ID
+AND C.START_DATE = '30-APR-17'
+AND C.DATASET_ID = 2
+AND C.ENTITY_TYPE IN ('RV','DV')
+AND D.STATUS = 'A'
+AND D.START_DATE = '30-APR-17'
+AND D.DATASET_ID = 2
+--NIR
+AND D.BAL_ACCT < '430000'
+--NONNIR
+--AND D.BAL_ACCT > '430000'
+--AND D.BAL_ACCT < '500000'
+--EXPENSE
+--AND D.BAL_ACCT > '500000'
+--AND D.BAL_ACCT < '600000'
+--MATRIX
+--AND D.BAL_ACCT > '900000'
+AND S.MDL_TYPE IN ('B','R')
+AND (D.BAL_DYNAMIC_MDL_ID = S.MDL_ID OR D.RATE_MDL_ID = S.MDL_ID)
+UNION
+SELECT /* + PARALLEL 16 */DISTINCT S.MDL_NAME AS PARENT_MDL_NAME,S.MDL_TYPE,REGEXP_REPLACE(C.ENTITY_INPUT,'''(.*)'',''(.*)'',''(.*)''','\1') AS CHILD_MDL_NAME  --D.BAL_ACCT,C.ENTITY_INPUT,
+FROM MDL_SETUP@RUBY_PROD S,MDL_ENTITY_RELN@RUBY_PROD C
+WHERE S.STATUS = 'A'
+AND S.START_DATE = '30-APR-17'
+AND S.DATASET_ID = 2
+AND S.MDL_SETUP_ID = C.MDL_SETUP_ID
+AND C.START_DATE = '30-APR-17'
+AND C.DATASET_ID = 2
+AND C.ENTITY_TYPE IN ('RV','DV')
+AND S.MDL_TYPE IN ('DV','RV')
+)
+START WITH MDL_TYPE IN ('B','R')
+CONNECT BY NOCYCLE PARENT_MDL_NAME = PRIOR CHILD_MDL_NAME
+)
+ORDER BY 1
+;
